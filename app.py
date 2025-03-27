@@ -1,19 +1,14 @@
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objs as go
 from dash import Dash, dcc, html
 from dash.dependencies import Input, Output
 import dash_bootstrap_components as dbc
-import numpy as np
 
 # Load data
 df = pd.read_csv("https://raw.githubusercontent.com/JoshData/historical-state-population-csv/refs/heads/primary/historical_state_population_by_year.csv", names=['state', 'year', 'population'])
 
 # Preprocessing
 df['state'] = df['state'].str.upper()
-
-# Calculate national population trend
-national_trend = df.groupby('year')['population'].sum().reset_index()
 
 # Create Dash app with Bootstrap theme
 app = Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
@@ -116,17 +111,20 @@ def update_map(selected_year, map_type):
         title = f'Total Population in {selected_year}'
         color_scale = 'Plasma'
     
-    fig = px.choropleth(
-        filtered_data, 
-        locations='state', 
+    fig = go.Figure(data=go.Choropleth(
+        locations=filtered_data['state'], 
+        z=filtered_data[color_column],
         locationmode="USA-states", 
-        color=color_column,
-        scope="usa",
-        color_continuous_scale=color_scale,
-        title=title,
-        labels={color_column: 'Value'}
+        colorscale=color_scale,
+        colorbar_title=color_column
+    ))
+    
+    fig.update_layout(
+        title_text=title,
+        geo_scope='usa',
+        height=600,
+        title_x=0.5
     )
-    fig.update_layout(height=600, title_x=0.5)
     return fig
 
 # Callback for State Population Trend
@@ -149,17 +147,6 @@ def update_state_population_trend(selected_state):
             mode='lines+markers', 
             name=f'{selected_state} Population',
             line=dict(color='blue', width=3)
-        )
-    )
-    
-    # Add national trend line for comparison
-    fig.add_trace(
-        go.Scatter(
-            x=national_trend['year'], 
-            y=national_trend['population'], 
-            mode='lines', 
-            name='National Total', 
-            line=dict(color='red', width=2, dash='dot')
         )
     )
     
@@ -195,3 +182,4 @@ server = app.server
 
 if __name__ == '__main__':
     app.run_server(debug=True)
+
