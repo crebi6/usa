@@ -2,7 +2,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objs as go
 from dash import Dash, dcc, html
-from dash.dependencies import Input, Output, State
+from dash.dependencies import Input, Output
 import dash_bootstrap_components as dbc
 import numpy as np
 
@@ -15,13 +15,14 @@ df['state'] = df['state'].str.upper()
 # Calculate national population trend
 national_trend = df.groupby('year')['population'].sum().reset_index()
 
-# Advanced layout with multiple tabs and more interactive components
+# Create Dash app with Bootstrap theme
 app = Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
 
+# App Layout
 app.layout = dbc.Container([
     # Header
     dbc.Row([
-        dbc.Col(html.H1("US Population Dynamics Explorer", 
+        dbc.Col(html.H1("US State Population Explorer", 
                         className="text-center my-4 display-4"), 
                 width=12)
     ]),
@@ -66,9 +67,23 @@ app.layout = dbc.Container([
         # Population Trends Tab
         dbc.Tab(label="Population Trends", children=[
             dbc.Row([
+                # State Selector
                 dbc.Col([
-                    # Population Trend Graph
-                    dcc.Graph(id='population-trend-graph')
+                    html.Label("Select State for Trend", className="fw-bold"),
+                    dcc.Dropdown(
+                        id='state-trend-dropdown',
+                        options=[{'label': state, 'value': state} for state in sorted(df['state'].unique())],
+                        value='NY',  # Default to New York
+                        clearable=False,
+                        className="mb-3"
+                    )
+                ], width=12)
+            ]),
+            
+            # Population Trend Graph
+            dbc.Row([
+                dbc.Col([
+                    dcc.Graph(id='state-population-trend-graph')
                 ], width=12)
             ])
         ])
@@ -114,52 +129,69 @@ def update_map(selected_year, map_type):
     fig.update_layout(height=600, title_x=0.5)
     return fig
 
-# Callback for Population Trend Graph
+# Callback for State Population Trend
 @app.callback(
-    Output('population-trend-graph', 'figure'),
-    [Input('year-dropdown', 'value')]
+    Output('state-population-trend-graph', 'figure'),
+    [Input('state-trend-dropdown', 'value')]
 )
-def update_population_trend(selected_year):
-    # Top 10 most populous states in the most recent year
-    top_states = df[df['year'] == selected_year].nlargest(10, 'population')['state'].unique()
+def update_state_population_trend(selected_state):
+    # Filter data for the selected state
+    state_data = df[df['state'] == selected_state]
     
-    # Prepare data for top states
-    trend_data = df[df['state'].isin(top_states)]
+    # Create line plot for the selected state
+    fig = go.Figure()
     
-    # Create line plot for top states
-    fig = px.line(
-        trend_data, 
-        x='year', 
-        y='population', 
-        color='state',
-        title='Population Trends for Top 10 Most Populous States',
-        labels={'population': 'Population', 'year': 'Year'}
+    # Add state trend line
+    fig.add_trace(
+        go.Scatter(
+            x=state_data['year'], 
+            y=state_data['population'], 
+            mode='lines+markers', 
+            name=f'{selected_state} Population',
+            line=dict(color='blue', width=3)
+        )
     )
     
-    # Add national trend as a thick black line
+    # Add national trend line for comparison
     fig.add_trace(
         go.Scatter(
             x=national_trend['year'], 
             y=national_trend['population'], 
             mode='lines', 
             name='National Total', 
-            line=dict(color='black', width=4, dash='dot')
+            line=dict(color='red', width=2, dash='dot')
         )
     )
     
+    # Calculate and add trend line annotations
+    first_pop = state_data['population'].iloc[0]
+    last_pop = state_data['population'].iloc[-1]
+    total_growth = ((last_pop - first_pop) / first_pop) * 100
+    
     fig.update_layout(
-        height=600, 
-        title_x=0.5,
+        title=f'Population Trend for {selected_state} (Total Growth: {total_growth:.2f}%)',
         xaxis_title='Year',
-        yaxis_title='Population'
+        yaxis_title='Population',
+        height=600,
+        title_x=0.5,
+        annotations=[
+            dict(
+                x=state_data['year'].iloc[-1],
+                y=last_pop,
+                xref="x", yref="y",
+                text=f'Current: {last_pop:,}',
+                showarrow=True,
+                arrowhead=7,
+                ax=0,
+                ay=-40
+            )
+        ]
     )
     
     return fig
 
-
-
-#for deployment
+# For Render deployment
 server = app.server
 
 if __name__ == '__main__':
-    app.run_server(host='0.0.0.0', port=10000, debug=True)
+    app.run_server(debug=True)
